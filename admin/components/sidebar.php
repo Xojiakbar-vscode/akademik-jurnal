@@ -13,7 +13,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link <?php echo $current_page == 'downloads.php' ? 'active' : ''; ?>" href="downloads.php">
+                <a class="nav-link <?php echo $current_page == 'download_logs.php' ? 'active' : ''; ?>" href="download_logs.php">
                     <i class="bi bi-download me-2"></i> Yuklab olishlar
                 </a>
             </li>
@@ -27,6 +27,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                     <i class="bi bi-tags me-2"></i> Kategoriyalar
                 </a>
             </li>
+            
             <li class="nav-item">
                 <a class="nav-link <?php echo $current_page == 'issues.php' ? 'active' : ''; ?>" href="issues.php">
                     <i class="bi bi-journal me-2"></i> Jurnal Sonlari

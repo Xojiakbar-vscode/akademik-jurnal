@@ -1,5 +1,5 @@
 <?php
-// register.php - Barcha ulanish mantiqi shu yerda
+// register.php - Ro'yxatdan o'tish sahifasi
 
 session_start();
 
@@ -30,17 +30,17 @@ function get_db_connection() {
 
     $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
     $options = [
-        PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_ERRMODE              => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_EMULATE_PREPARES   => false,
+        PDO::ATTR_EMULATE_PREPARES     => false,
     ];
     
     try {
-         // Ulanishni yaratish
-         return new PDO($dsn, $user, $pass, $options);
+        // Ulanishni yaratish
+        return new PDO($dsn, $user, $pass, $options);
     } catch (\PDOException $e) {
-         // Agar ulanishda xato bo'lsa, xatolikni tashlash
-         throw new Exception("Ma'lumotlar bazasi ulanish xatosi: " . $e->getMessage());
+        // Agar ulanishda xato bo'lsa, xatolikni tashlash
+        throw new Exception("Ma'lumotlar bazasi ulanish xatosi: " . $e->getMessage());
     }
 }
 
@@ -61,12 +61,9 @@ $success = '';
  * @param string $email
  * @param string $password
  * @param string|null $phone
- * @param string $affiliation
- * @param string $orcid_id
- * @param string $bio
  * @throws Exception
  */
-function create_user(PDO $pdo, $name, $email, $password, $phone, $affiliation, $orcid_id, $bio) {
+function create_user(PDO $pdo, $name, $email, $password, $phone) {
     global $success;
     
     try {
@@ -79,42 +76,34 @@ function create_user(PDO $pdo, $name, $email, $password, $phone, $affiliation, $
         $sql_placeholders = ['?', '?', '?', '?', '?'];
         $params = [$name, $email, $hashed_password, $role, $current_datetime];
         
-        // Ixtiyoriy/Qo'shimcha maydonlar 
+        // Ixtiyoriy/Qo'shimcha maydonlar (Faqat telefon qoldi)
         if (!empty($phone)) {
             $sql_columns[] = 'phone';
             $sql_placeholders[] = '?';
             $params[] = $phone;
         }
 
-        if (!empty($affiliation)) {
-            $sql_columns[] = 'affiliation';
-            $sql_placeholders[] = '?';
-            $params[] = $affiliation;
-        }
-        if (!empty($orcid_id)) {
-            $sql_columns[] = 'orcid_id';
-            $sql_placeholders[] = '?';
-            $params[] = $orcid_id;
-        }
-        if (!empty($bio)) {
-            $sql_columns[] = 'bio';
-            $sql_placeholders[] = '?';
-            $params[] = $bio;
-        }
-        
-        // Eslatma: profile_image, last_login, website, research_interests kabi maydonlar
-        // NULL yoki DB dagi DEFAULT qiymatga tayanadi, shuning uchun bu yerda kiritilmaydi.
-
         $sql = "INSERT INTO users (" . implode(', ', $sql_columns) . ") VALUES (" . implode(', ', $sql_placeholders) . ")";
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         
-        $success = "Ro'yxatdan o'tish muvaffaqiyatli yakunlandi! Iltimos, tizimga kiring.";
+        $success = "Ro'yxatdan o'tish muvaffaqiyatli yakunlandi! Iltimos, tizimga kiring. " . t('redirecting');
         // 3 soniyadan keyin login.php ga yo'naltirish
         header("Refresh: 3; url=login.php");
         exit();
         
     } catch (PDOException $e) {
+        // Agar email yoki telefon raqami UNIQUE cheklovini buzsa (Duplicate entry for key 'email')
+        if ($e->getCode() == '23000') {
+            // Xato xabarini aniqroq ko'rsatishga urinish
+            if (strpos($e->getMessage(), 'email') !== false) {
+                throw new Exception("Ushbu email manzil allaqachon ro'yxatdan o'tgan");
+            } elseif (strpos($e->getMessage(), 'phone') !== false) {
+                throw new Exception("Ushbu telefon raqami allaqachon ro'yxatdan o'tgan");
+            } else {
+                throw new Exception("Ma'lumotlar bazasiga saqlashda xatolik: " . $e->getMessage());
+            }
+        }
         throw new Exception("Ma'lumotlar bazasiga saqlashda xatolik: " . $e->getMessage());
     }
 }
@@ -127,71 +116,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['register'])) {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     $phone = trim($_POST['phone'] ?? ''); 
-    $affiliation = trim($_POST['affiliation'] ?? '');
-    $orcid_id = trim($_POST['orcid_id'] ?? '');
-    $bio = trim($_POST['bio'] ?? '');
     
     // Telefon raqamini to'g'ri formatga keltirish (+998XXXXXXXXX)
     $cleaned_phone_full = NULL;
+    // Telefon raqamidan faqat raqamlarni olib tashlash
     $cleaned_phone_numbers = preg_replace('/\D/', '', $phone); 
     
+    // Agar 9 ta raqam bo'lsa, +998 prefiksini qo'shib to'liq formatga keltiramiz
     if (!empty($cleaned_phone_numbers) && strlen($cleaned_phone_numbers) === 9) {
         $cleaned_phone_full = '+998' . $cleaned_phone_numbers;
-    }
-
-    // Validatsiya
-    if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
-        $error = "Iltimos, barcha majburiy maydonlarni to'ldiring";
-    } elseif ($password !== $confirm_password) {
-        $error = "Parollar mos kelmadi";
-    } elseif (strlen($password) < 6) {
-        $error = "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = "Iltimos, to'g'ri email manzil kiriting";
-    } elseif (!empty($phone) && strlen($cleaned_phone_numbers) !== 9) {
+    } elseif (!empty($cleaned_phone_numbers)) {
+        // Agar raqam kiritilgan bo'lsa, lekin 9 ta bo'lmasa, xato beramiz.
         $error = "Telefon raqami 9 ta raqamdan iborat bo'lishi kerak (masalan: 901234567)";
-    } else {
-        try {
-            // Ma'lumotlar bazasiga ulanish
-            $pdo = get_db_connection();
-            
-            // Email allaqachon mavjudligini tekshirish
-            $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-            $stmt->execute([$email]);
-            
-            if ($stmt->fetch()) {
-                $error = "Ushbu email manzil allaqachon ro'yxatdan o'tgan";
-            } else {
-                // Telefon raqami mavjudligini tekshirish (agar kiritilgan bo'lsa)
-                if ($cleaned_phone_full !== NULL) {
-                    $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ?");
-                    $stmt->execute([$cleaned_phone_full]);
-                    if ($stmt->fetch()) {
-                        $error = "Ushbu telefon raqami allaqachon ro'yxatdan o'tgan";
-                    } else {
-                        // Foydalanuvchini yaratish
-                        create_user($pdo, $name, $email, $password, $cleaned_phone_full, $affiliation, $orcid_id, $bio);
-                    }
+    }
+    
+    
+    // Validatsiya
+    if (empty($error)) { // Agar telefon raqami tekshiruvidan o'tgan bo'lsa
+        if (empty($name) || empty($email) || empty($password) || empty($confirm_password)) {
+            $error = "Iltimos, barcha majburiy maydonlarni to'ldiring";
+        } elseif ($password !== $confirm_password) {
+            $error = "Parollar mos kelmadi";
+        } elseif (strlen($password) < 6) {
+            $error = "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $error = "Iltimos, to'g'ri email manzil kiriting";
+        } else {
+            try {
+                // Ma'lumotlar bazasiga ulanish
+                $pdo = get_db_connection();
+                
+                // Email allaqachon mavjudligini tekshirish
+                $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                $stmt->execute([$email]);
+                
+                if ($stmt->fetch()) {
+                    $error = "Ushbu email manzil allaqachon ro'yxatdan o'tgan";
                 } else {
-                    // Telefon raqami kiritilmagan (NULL yuboriladi)
-                    create_user($pdo, $name, $email, $password, NULL, $affiliation, $orcid_id, $bio);
+                    // Telefon raqami mavjudligini tekshirish (agar kiritilgan bo'lsa)
+                    if ($cleaned_phone_full !== NULL) {
+                        $stmt = $pdo->prepare("SELECT id FROM users WHERE phone = ?");
+                        $stmt->execute([$cleaned_phone_full]);
+                        if ($stmt->fetch()) {
+                            $error = "Ushbu telefon raqami allaqachon ro'yxatdan o'tgan";
+                        } else {
+                            // Foydalanuvchini yaratish
+                            create_user($pdo, $name, $email, $password, $cleaned_phone_full);
+                        }
+                    } else {
+                        // Telefon raqami kiritilmagan (NULL yuboriladi)
+                        create_user($pdo, $name, $email, $password, NULL);
+                    }
                 }
+            } catch (Exception $e) {
+                $error = "Tizim xatosi: " . $e->getMessage();
             }
-        } catch (Exception $e) {
-            $error = "Tizim xatosi: " . $e->getMessage();
         }
     }
 }
 
 
-// 3. Til sozlamalari va Tarjima funksiyasi (oldingi koddan o'zgarishsiz)
+// 3. Til sozlamalari va Tarjima funksiyasi
 if (!isset($_SESSION['language'])) {
     $_SESSION['language'] = 'uz';
 }
 $current_language = $_SESSION['language'];
 
 function t($key) {
-    // Katta tarjima massivi (oldingi koddan ko'chiriladi)
+    // Tarjima massivi
     $translations = [
         'uz' => [
             'site_name' => 'Akademik Jurnal',
@@ -202,32 +194,26 @@ function t($key) {
             'phone' => 'Telefon raqami',
             'password' => 'Parol',
             'confirm_password' => 'Parolni tasdiqlang',
-            'affiliation' => 'Muassasa/Tashkilot',
-            'orcid_id' => 'ORCID ID',
-            'bio' => 'Qisqacha ma\'lumot',
             'register_btn' => 'Ro\'yxatdan o\'tish',
             'have_account' => 'Hisobingiz bormi?',
             'login_here' => 'Kirish',
             'optional' => 'ixtiyoriy',
             'required' => 'majburiy',
-            'slogan' => 'Ilmiy hamjamiyatimizga qo\'shiling va maqolalaringizni nashr eting',
+            'slogan' => 'Ilmiy hamjamiyatimizga qo\'shiling',
             'benefits_title' => 'Ro\'yxatdan o\'tish afzalliklari:',
             'benefit1' => 'Maqolalar yuborish',
             'benefit2' => 'Izohlar qoldirish',
             'benefit3' => 'Yuklab olish imkoniyati',
             'benefit4' => 'Shaxsiy profil',
-            'form_slogan' => 'Maqolalar yuborish uchun hisob yarating',
-            'quick_test' => 'Tez ro\'yxatdan o\'tish uchun:',
-            'clear_form' => 'Tozalash',
             'min_6_chars' => 'Kamida 6 ta belgi',
             'terms' => 'Men <a href="terms.php" class="text-decoration-none">foydalanish shartlari</a> va <a href="privacy.php" class="text-decoration-none">maxfiylik siyosati</a> bilan tanishdim va roziman',
             'terms_feedback' => 'Shartlarga rozilik bildirishingiz kerak',
             'redirecting' => 'Login sahifasiga yo\'naltirilmoqda...',
             'phone_placeholder' => '90 123 45 67',
             'phone_help' => '9 ta raqam kiriting (masalan: 90 123 45 67)',
-            'bio_placeholder' => 'Qisqacha o\'zingiz haqingizda...'
         ],
         'ru' => [
+            // ... (ruscha tarjimalar)
             'site_name' => 'Академический Журнал',
             'register' => 'Регистрация',
             'create_account' => 'Создать новый аккаунт',
@@ -236,32 +222,26 @@ function t($key) {
             'phone' => 'Номер телефона',
             'password' => 'Пароль',
             'confirm_password' => 'Подтвердите пароль',
-            'affiliation' => 'Учреждение/Организация',
-            'orcid_id' => 'ORCID ID',
-            'bio' => 'Краткая информация',
             'register_btn' => 'Зарегистрироваться',
             'have_account' => 'Уже есть аккаунт?',
             'login_here' => 'Войти',
             'optional' => 'опционально',
             'required' => 'обязательно',
-            'slogan' => 'Присоединяйтесь к нашему научному сообществу и публикуйте свои статьи',
+            'slogan' => 'Присоединяйтесь к нашему научному сообществу',
             'benefits_title' => 'Преимущества регистрации:',
             'benefit1' => 'Отправка статей',
             'benefit2' => 'Оставлять комментарии',
             'benefit3' => 'Возможность скачивания',
             'benefit4' => 'Личный профиль',
-            'form_slogan' => 'Создайте аккаунт для отправки статей',
-            'quick_test' => 'Для быстрой регистрации:',
-            'clear_form' => 'Очистить',
             'min_6_chars' => 'Минимум 6 символов',
             'terms' => 'Я ознакомился с <a href="terms.php" class="text-decoration-none">условиями использования</a> и <a href="privacy.php" class="text-decoration-none">политикой конфиденциальности</a> и согласен',
             'terms_feedback' => 'Вы должны согласиться с условиями',
             'redirecting' => 'Перенаправление на страницу входа...',
             'phone_placeholder' => '90 123 45 67',
             'phone_help' => 'Введите 9 цифр (например: 90 123 45 67)',
-            'bio_placeholder' => 'Кратко о себе...'
         ],
         'en' => [
+            // ... (inglizcha tarjimalar)
             'site_name' => 'Academic Journal',
             'register' => 'Register',
             'create_account' => 'Create New Account',
@@ -270,30 +250,23 @@ function t($key) {
             'phone' => 'Phone Number',
             'password' => 'Password',
             'confirm_password' => 'Confirm Password',
-            'affiliation' => 'Institution/Organization',
-            'orcid_id' => 'ORCID ID',
-            'bio' => 'Short Bio',
             'register_btn' => 'Register',
             'have_account' => 'Already have an account?',
             'login_here' => 'Login here',
             'optional' => 'optional',
             'required' => 'required',
-            'slogan' => 'Join our scientific community and publish your papers',
+            'slogan' => 'Join our scientific community',
             'benefits_title' => 'Registration benefits:',
             'benefit1' => 'Submit articles',
             'benefit2' => 'Leave comments',
             'benefit3' => 'Download access',
             'benefit4' => 'Personal profile',
-            'form_slogan' => 'Create an account to submit papers',
-            'quick_test' => 'For quick registration:',
-            'clear_form' => 'Clear',
             'min_6_chars' => 'Minimum 6 characters',
             'terms' => 'I have read and agree to the <a href="terms.php" class="text-decoration-none">terms of service</a> and <a href="privacy.php" class="text-decoration-none">privacy policy</a>',
             'terms_feedback' => 'You must agree to the terms',
             'redirecting' => 'Redirecting to login page...',
             'phone_placeholder' => '90 123 45 67',
             'phone_help' => 'Enter 9 digits (e.g., 90 123 45 67)',
-            'bio_placeholder' => 'Briefly about yourself...'
         ]
     ];
     
@@ -407,17 +380,21 @@ $current_page = 'register.php';
             border-left: none;
         }
         
-        .test-account {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-left: 4px solid #28a745;
-        }
-        
         .form-label {
             font-weight: 600;
             margin-bottom: 8px;
+        }
+        
+        /* Oddiyroq dizayn uchun sidebar/header o'lchamini o'zgartiramiz */
+        @media (min-width: 992px) {
+            .register-card .col-lg-6:first-child {
+                flex: 0 0 auto;
+                width: 40%; /* Chap panel uchun kamroq joy */
+            }
+            .register-card .col-lg-6:last-child {
+                flex: 0 0 auto;
+                width: 60%; /* Forma uchun ko'proq joy */
+            }
         }
     </style>
 </head>
@@ -425,12 +402,12 @@ $current_page = 'register.php';
     <section class="register-section">
         <div class="container">
             <div class="row justify-content-center">
-                <div class="col-xl-10">
+                <div class="col-xl-10 col-lg-9">
                     <div class="card register-card">
                         <div class="row g-0">
                             <div class="col-lg-6 d-none d-lg-block">
                                 <div class="register-header h-100 d-flex align-items-center justify-content-center">
-                                    <div class="text-center text-white">
+                                    <div class="text-center text-white p-3">
                                         <i class="bi bi-person-plus display-1 mb-3"></i>
                                         <h3 class="mb-3"><?php echo t('site_name'); ?></h3>
                                         <p class="mb-4"><?php echo t('slogan'); ?></p>
@@ -452,22 +429,7 @@ $current_page = 'register.php';
                                 <div class="register-body">
                                     <div class="text-center mb-4">
                                         <h2 class="fw-bold"><?php echo t('create_account'); ?></h2>
-                                        <p class="text-muted"><?php echo t('form_slogan'); ?></p>
-                                    </div>
-                                    
-                                    <div class="test-account">
-                                        <small class="text-muted d-block mb-2"><?php echo t('quick_test'); ?></small>
-                                        <div class="d-flex flex-wrap gap-2">
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="fillTestData('user1')">
-                                                Test 1
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-success" onclick="fillTestData('user2')">
-                                                Test 2
-                                            </button>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="clearForm()">
-                                                <?php echo t('clear_form'); ?>
-                                            </button>
-                                        </div>
+                                        <p class="text-muted"><?php echo t('slogan'); ?></p>
                                     </div>
                                     
                                     <?php if ($error): ?>
@@ -503,8 +465,8 @@ $current_page = 'register.php';
                                                             <i class="bi bi-person"></i>
                                                         </span>
                                                         <input type="text" class="form-control" id="name" name="name" 
-                                                               value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>" 
-                                                               required placeholder="Ali Valiyev">
+                                                            value="<?php echo isset($_POST['name']) ? htmlspecialchars($_POST['name']) : ''; ?>" 
+                                                            required placeholder="Ali Valiyev">
                                                     </div>
                                                     <div class="invalid-feedback">Iltimos, ismingizni kiriting</div>
                                                 </div>
@@ -521,8 +483,8 @@ $current_page = 'register.php';
                                                             <i class="bi bi-envelope"></i>
                                                         </span>
                                                         <input type="email" class="form-control" id="email" name="email" 
-                                                               value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" 
-                                                               required placeholder="email@example.com">
+                                                            value="<?php echo isset($_POST['email']) ? htmlspecialchars($_POST['email']) : ''; ?>" 
+                                                            required placeholder="email@example.com">
                                                     </div>
                                                     <div class="invalid-feedback">Iltimos, to'g'ri email manzil kiriting</div>
                                                 </div>
@@ -537,8 +499,8 @@ $current_page = 'register.php';
                                                     <div class="input-group">
                                                         <span class="input-group-text phone-prefix">+998</span>
                                                         <input type="text" class="form-control phone-input" id="phone" name="phone" 
-                                                               value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>" 
-                                                               placeholder="<?php echo t('phone_placeholder'); ?>" maxlength="12">
+                                                            value="<?php echo isset($_POST['phone']) ? htmlspecialchars($_POST['phone']) : ''; ?>" 
+                                                            placeholder="<?php echo t('phone_placeholder'); ?>" maxlength="12">
                                                     </div>
                                                     <small class="text-muted"><?php echo t('phone_help'); ?></small>
                                                     <div class="invalid-feedback">Iltimos, to'g'ri telefon raqam kiriting (9 ta raqam)</div>
@@ -556,8 +518,8 @@ $current_page = 'register.php';
                                                             <i class="bi bi-lock"></i>
                                                         </span>
                                                         <input type="password" class="form-control" id="password" name="password" 
-                                                               required placeholder="••••••••" minlength="6">
-                                                        <button type="button" class="input-group-text toggle-password">
+                                                            required placeholder="••••••••" minlength="6">
+                                                        <button type="button" class="input-group-text toggle-password" onclick="togglePasswordVisibility('password', this)">
                                                             <i class="bi bi-eye"></i>
                                                         </button>
                                                     </div>
@@ -578,70 +540,42 @@ $current_page = 'register.php';
                                                             <i class="bi bi-lock-fill"></i>
                                                         </span>
                                                         <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
-                                                               required placeholder="••••••••">
+                                                            required placeholder="••••••••">
+                                                        <button type="button" class="input-group-text toggle-password" onclick="togglePasswordVisibility('confirm_password', this)">
+                                                            <i class="bi bi-eye"></i>
+                                                        </button>
                                                     </div>
                                                     <div class="text-danger small" id="passwordMatchError"></div>
                                                     <div class="invalid-feedback">Parollar mos kelishi kerak</div>
                                                 </div>
                                             </div>
                                             
-                                            <div class="col-md-12">
-                                                <div class="mb-3">
-                                                    <label for="affiliation" class="form-label">
-                                                        <?php echo t('affiliation'); ?>
-                                                        <span class="optional-badge"><?php echo t('optional'); ?></span>
+                                            <div class="col-12 mt-3">
+                                                <div class="form-check mb-3">
+                                                    <input class="form-check-input" type="checkbox" value="" id="flexCheckDefault" required>
+                                                    <label class="form-check-label" for="flexCheckDefault">
+                                                        <?php echo t('terms'); ?>
                                                     </label>
-                                                    <input type="text" class="form-control" id="affiliation" name="affiliation" 
-                                                            value="<?php echo isset($_POST['affiliation']) ? htmlspecialchars($_POST['affiliation']) : ''; ?>" 
-                                                            placeholder="Toshkent Davlat Universiteti">
+                                                    <div class="invalid-feedback"><?php echo t('terms_feedback'); ?></div>
                                                 </div>
                                             </div>
                                             
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="orcid_id" class="form-label">
-                                                        <?php echo t('orcid_id'); ?>
-                                                        <span class="optional-badge"><?php echo t('optional'); ?></span>
-                                                    </label>
-                                                    <input type="text" class="form-control" id="orcid_id" name="orcid_id" 
-                                                            value="<?php echo isset($_POST['orcid_id']) ? htmlspecialchars($_POST['orcid_id']) : ''; ?>" 
-                                                            placeholder="0000-0002-1825-0097">
-                                                </div>
+                                            <div class="col-12">
+                                                <button type="submit" name="register" class="btn btn-register w-100 mt-2">
+                                                    <i class="bi bi-box-arrow-in-right me-2"></i><?php echo t('register_btn'); ?>
+                                                </button>
                                             </div>
-                                            
-                                            <div class="col-md-6">
-                                                <div class="mb-3">
-                                                    <label for="bio" class="form-label">
-                                                        <?php echo t('bio'); ?>
-                                                        <span class="optional-badge"><?php echo t('optional'); ?></span>
-                                                    </label>
-                                                    <textarea class="form-control" id="bio" name="bio" rows="3" 
-                                                                placeholder="<?php echo t('bio_placeholder'); ?>"><?php echo isset($_POST['bio']) ? htmlspecialchars($_POST['bio']) : ''; ?></textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <div class="mb-3 form-check">
-                                            <input type="checkbox" class="form-check-input" id="terms" name="terms" required>
-                                            <label class="form-check-label" for="terms">
-                                                <?php echo t('terms'); ?>
-                                            </label>
-                                            <div class="invalid-feedback"><?php echo t('terms_feedback'); ?></div>
-                                        </div>
-                                        
-                                        <button type="submit" name="register" class="btn btn-register w-100 mb-3">
-                                            <i class="bi bi-person-plus me-2"></i><?php echo t('register_btn'); ?>
-                                        </button>
-                                        
-                                        <div class="text-center">
-                                            <p class="text-muted">
-                                                <?php echo t('have_account'); ?>
-                                                <a href="login.php" class="text-decoration-none fw-bold">
-                                                    <?php echo t('login_here'); ?>
-                                                </a>
-                                            </p>
                                         </div>
                                     </form>
+                                    
+                                    <div class="text-center mt-4">
+                                        <p class="mb-0"><?php echo t('have_account'); ?> 
+                                            <a href="login.php" class="text-decoration-none fw-bold text-primary">
+                                                <?php echo t('login_here'); ?>
+                                            </a>
+                                        </p>
+                                    </div>
+                                    
                                     <?php endif; ?>
                                 </div>
                             </div>
@@ -654,175 +588,86 @@ $current_page = 'register.php';
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        const testData = {
-            user1: {
-                name: 'Test Ali Valiyev',
-                email: 'test_user1@example.com',
-                phone: '901234532', 
-                password: 'password123',
-                affiliation: 'Tashkent University',
-                orcid_id: '0000-0001-2345-6789',
-                bio: 'Simple test user account.'
-            },
-            user2: {
-                name: 'Test Nigora Olimova PhD',
-                email: 'nigora_phd_test@uni.edu',
-                phone: '971234567',
-                password: 'StrongPassword456#',
-                affiliation: 'Toshkent Davlat Universiteti',
-                orcid_id: '0000-0003-4240-0097',
-                bio: 'Iqtisodiyot fanlari nomzodi, marketing sohasida 10 yillik tajribaga ega.'
-            }
-        };
-
-        function checkPasswordStrength(password) {
-            let strength = 0;
-            if (password.length >= 6) { strength += 1; }
-            if (password.match(/[a-z]+/)) { strength += 1; }
-            if (password.match(/[A-Z]+/)) { strength += 1; }
-            if (password.match(/[0-9]+/)) { strength += 1; }
-            if (password.match(/[^a-zA-Z0-9\s]+/)) { strength += 1; }
-            return strength; 
-        }
-
-        function updatePasswordStrengthIndicator() {
-            const password = document.getElementById('password').value;
-            const strengthDiv = document.getElementById('passwordStrength');
-            const strength = checkPasswordStrength(password);
-
-            strengthDiv.className = 'password-strength';
-
-            if (password.length > 0) {
-                if (strength <= 2) {
-                    strengthDiv.classList.add('strength-weak');
-                } else if (strength === 3) {
-                    strengthDiv.classList.add('strength-medium');
-                } else if (strength === 4) {
-                    strengthDiv.classList.add('strength-strong');
-                } else if (strength >= 5) {
-                    strengthDiv.classList.add('strength-very-strong');
-                }
-            }
-            checkPasswordMatch();
-        }
-
-        function checkPasswordMatch() {
-            const password = document.getElementById('password').value;
-            const confirmPassword = document.getElementById('confirm_password').value;
-            const matchError = document.getElementById('passwordMatchError');
+        // Password ko'rinishini almashtirish funksiyasi
+        function togglePasswordVisibility(id, button) {
+            const input = document.getElementById(id);
+            const icon = button.querySelector('i');
             
-            if (password.length > 0 && confirmPassword.length > 0 && password !== confirmPassword) {
-                matchError.textContent = "Parollar mos kelmadi";
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('bi-eye');
+                icon.classList.add('bi-eye-slash');
             } else {
-                matchError.textContent = "";
+                input.type = 'password';
+                icon.classList.remove('bi-eye-slash');
+                icon.classList.add('bi-eye');
             }
         }
 
-        function fillTestData(type) {
-            const data = testData[type];
-            if (!data) return;
-
-            const timestamp = new Date().getTime();
-            const uniqueEmail = data.email.replace(/(@.*)/, `-${timestamp}$1`); 
+        // Parol kuchi tekshiruvi (minimal darajada)
+        document.getElementById('password').addEventListener('input', function() {
+            const password = this.value;
+            const strengthBar = document.getElementById('passwordStrength');
             
-            document.getElementById('name').value = data.name;
-            document.getElementById('email').value = uniqueEmail;
-            
-            // Telefon raqamini formatlash
-            const rawPhone = data.phone;
-            const formattedPhone = `${rawPhone.substring(0, 2)} ${rawPhone.substring(2, 5)} ${rawPhone.substring(5, 7)} ${rawPhone.substring(7, 9)}`;
-            document.getElementById('phone').value = formattedPhone;
+            let strength = 0;
+            if (password.length > 5) strength++;
+            if (password.match(/[a-z]/) && password.match(/[A-Z]/)) strength++;
+            if (password.match(/\d/)) strength++;
+            if (password.match(/[^a-zA-Z\d]/)) strength++; // Maxsus belgi
 
-            document.getElementById('password').value = data.password;
-            document.getElementById('confirm_password').value = data.password; 
-            document.getElementById('affiliation').value = data.affiliation;
-            document.getElementById('orcid_id').value = data.orcid_id;
-            document.getElementById('bio').value = data.bio;
+            strengthBar.className = 'password-strength';
             
-            document.getElementById('terms').checked = true;
-
-            updatePasswordStrengthIndicator();
-            
-            const form = document.getElementById('registerForm');
-            form.classList.add('was-validated'); 
-        }
-
-        function clearForm() {
-            const form = document.getElementById('registerForm');
-            form.reset();
-            form.classList.remove('was-validated');
-            document.getElementById('passwordStrength').className = 'password-strength';
-            document.getElementById('passwordMatchError').textContent = "";
-        }
+            if (strength === 0) {
+                strengthBar.style.width = '0%';
+            } else if (strength <= 1) {
+                strengthBar.classList.add('strength-weak');
+            } else if (strength === 2) {
+                strengthBar.classList.add('strength-medium');
+            } else if (strength === 3) {
+                strengthBar.classList.add('strength-strong');
+            } else {
+                strengthBar.classList.add('strength-very-strong');
+            }
+            checkPasswordsMatch();
+        });
         
-        // Parol ko'rsatish/yashirish
-        document.querySelectorAll('.toggle-password').forEach(button => {
-            button.addEventListener('click', function() {
-                const passwordInput = document.getElementById('password');
-                const icon = this.querySelector('i');
-                
-                if (passwordInput.type === 'password') {
-                    passwordInput.type = 'text';
-                    icon.classList.remove('bi-eye');
-                    icon.classList.add('bi-eye-slash');
+        // Parollar mosligini tekshirish
+        const passwordInput = document.getElementById('password');
+        const confirmPasswordInput = document.getElementById('confirm_password');
+        const passwordMatchError = document.getElementById('passwordMatchError');
+
+        function checkPasswordsMatch() {
+            if (confirmPasswordInput.value !== '') {
+                if (passwordInput.value === confirmPasswordInput.value) {
+                    passwordMatchError.textContent = '';
+                    confirmPasswordInput.setCustomValidity('');
                 } else {
-                    passwordInput.type = 'password';
-                    icon.classList.remove('bi-eye-slash');
-                    icon.classList.add('bi-eye');
+                    passwordMatchError.textContent = 'Parollar mos kelmadi';
+                    confirmPasswordInput.setCustomValidity('Parollar mos kelmadi');
                 }
-            });
-        });
-
-        // Parol kiritish maydonlariga tinglovchilarni biriktirish
-        document.getElementById('password').addEventListener('input', updatePasswordStrengthIndicator);
-        document.getElementById('confirm_password').addEventListener('input', checkPasswordMatch);
-
-        // Telefon raqami formatlash (masking)
-        document.getElementById('phone').addEventListener('input', function(e) {
-            let value = e.target.value.replace(/\D/g, ''); 
-            
-            if (value.length > 9) {
-                value = value.substring(0, 9);
+            } else {
+                passwordMatchError.textContent = '';
+                confirmPasswordInput.setCustomValidity('');
             }
-            
-            let formatted = '';
-            if (value.length > 0) formatted += value.substring(0, 2);
-            if (value.length > 2) formatted += ' ' + value.substring(2, 5);
-            if (value.length > 5) formatted += ' ' + value.substring(5, 7);
-            if (value.length > 7) formatted += ' ' + value.substring(7, 9);
+        }
 
-            e.target.value = formatted;
-        });
+        passwordInput.addEventListener('input', checkPasswordsMatch);
+        confirmPasswordInput.addEventListener('input', checkPasswordsMatch);
 
-
-        // Bootstrap Validatsiyasi
-        (function () {
-            'use strict'
+        // Bootstrap form validatsiyasini yoqish
+        (function() {
+            'use strict';
             const form = document.getElementById('registerForm');
-            
-            form.addEventListener('submit', function (event) {
-                if (document.getElementById('passwordMatchError').textContent !== "") {
+            form.addEventListener('submit', function(event) {
+                if (!form.checkValidity() || passwordInput.value !== confirmPasswordInput.value) {
                     event.preventDefault();
                     event.stopPropagation();
+                    // Maxsus parollar mos kelmasligi xatosini yana bir bor tekshirish
+                    checkPasswordsMatch(); 
                 }
-
-                const phoneInput = document.getElementById('phone');
-                const numbers = phoneInput.value.replace(/\D/g, '');
-                
-                if (phoneInput.value.trim() !== '' && numbers.length !== 9) {
-                    phoneInput.setCustomValidity("Iltimos, to'g'ri telefon raqam kiriting (9 ta raqam)");
-                } else {
-                    phoneInput.setCustomValidity(""); 
-                }
-
-                if (!form.checkValidity()) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                }
-
                 form.classList.add('was-validated');
             }, false);
-        })()
+        })();
     </script>
 </body>
 </html>

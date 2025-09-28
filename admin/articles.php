@@ -1,10 +1,72 @@
 <?php
+// Kerakli fayllarni yuklash
 require_once '../includes/config.php';
 require_once '../includes/database.php';
 require_once '../includes/auth.php';
 require_once '../includes/functions.php';
 
+// Faqat Adminlar uchun ruxsat
 $auth->requireAdmin();
+
+// --- POST/GET so'rovlarini qayta ishlash qismi ---
+
+// Maqola holatini yangilash
+if (isset($_GET['change_status']) && isset($_GET['id'])) {
+    $article_id = (int)$_GET['id'];
+    $new_status = $_GET['change_status'];
+    
+    $valid_statuses = ['pending', 'approved', 'rejected'];
+    if (in_array($new_status, $valid_statuses)) {
+        // Status 'approved' bo'lsa published_at maydonini yangilash
+        $update_query = "UPDATE articles SET status = ?";
+        $params_update = [$new_status];
+
+        if ($new_status === 'approved') {
+            $update_query .= ", published_at = NOW()";
+        } elseif ($new_status === 'pending' || $new_status === 'rejected') {
+            // Agar boshqa holatga qaytarilsa, published_at ni NULL qilish (ixtiyoriy, lekin mantiqiy)
+            // $update_query .= ", published_at = NULL"; 
+        }
+
+        $update_query .= " WHERE id = ?";
+        $params_update[] = $article_id;
+
+        $pdo->prepare($update_query)->execute($params_update);
+        
+        $_SESSION['success_message'] = "Maqola holati yangilandi: " . $new_status;
+        
+        // Yangilash parametrlarini tozalab, filtrlash parametrlarini saqlab qolgan holda sahifaga yo'naltirish
+        $redirect_params = array_diff_key($_GET, ['change_status' => '', 'id' => '']);
+        header("Location: articles.php?" . http_build_query($redirect_params));
+        exit();
+    }
+}
+
+// Maqolani o'chirish
+if (isset($_GET['delete'])) {
+    $article_id = (int)$_GET['delete'];
+    
+    // PDF faylni o'chirish
+    $stmt = $pdo->prepare("SELECT pdf_path FROM articles WHERE id = ?");
+    $stmt->execute([$article_id]);
+    $article_to_delete = $stmt->fetch(); // $article nomidan farqli o'laroq yangi o'zgaruvchi
+    
+    if ($article_to_delete && $article_to_delete['pdf_path'] && file_exists("../uploads/articles/" . $article_to_delete['pdf_path'])) {
+        unlink("../uploads/articles/" . $article_to_delete['pdf_path']);
+    }
+    
+    // Maqolani o'chirish (bog'langan category yozuvlari kaskad orqali o'chirilishi kerak)
+    $pdo->prepare("DELETE FROM articles WHERE id = ?")->execute([$article_id]);
+    
+    $_SESSION['success_message'] = "Maqola muvaffaqiyatli o'chirildi";
+
+    // O'chirish parametrini tozalab, filtrlash parametrlarini saqlab qolgan holda sahifaga yo'naltirish
+    $redirect_params = array_diff_key($_GET, ['delete' => '']);
+    header("Location: articles.php?" . http_build_query($redirect_params));
+    exit();
+}
+
+// --- Filtrlash va sahifalash qismi ---
 
 // Filtrlar
 $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
@@ -38,9 +100,14 @@ if ($status_filter !== 'all') {
     $params[] = $status_filter;
 }
 
-// Kategoriya bo'yicha filtr
+// Kategoriya bo'yicha filtr (Agar kategoriya filtri qo'llangan bo'lsa, JOIN orqali faqat mos keladigan maqolalarni tanlash)
+// E'tibor bering: GROUP BY tufayli bu filtr to'g'ri ishlaydi, ammo agar maqola bir nechta kategoriyaga ega bo'lsa,
+// u kategoriyalardan biri mos kelsa ham, qaytariladi. Maqola_categories jadvalidagi *har bir* maqola IDsi uchun bir qatorni ta'minlaydi
+// bu JOIN. Agar 'category_filter' 0dan katta bo'lsa, `HAVING`dan foydalanish ba'zan aniqroq bo'ladi,
+// lekin berilgan JOIN tuzilishi uchun, shartni WHERE ga qo'shish ma'qul.
 if ($category_filter > 0) {
-    $where_conditions[] = "c.id = ?";
+    // Kategoriya filtri qo'shilganda `article_categories` jadvalidan foydalanishni ta'minlash uchun
+    $where_conditions[] = "ac.category_id = ?";
     $params[] = $category_filter;
 }
 
@@ -65,6 +132,8 @@ if (!empty($where_conditions)) {
 }
 
 // Gruppalash va tartiblash
+// LIMIT va OFFSET uchun $articles_per_page va $offset o'zgaruvchilari to'g'ridan-to'g'ri qo'shildi, 
+// chunki ular foydalanuvchi kiritmasi emas, balki ichki hisob-kitoblar.
 $sql .= " GROUP BY a.id ORDER BY a.created_at DESC LIMIT $articles_per_page OFFSET $offset";
 
 // Maqolalarni olish
@@ -72,7 +141,8 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $articles = $stmt->fetchAll();
 
-// Jami maqolalar soni
+// Jami maqolalar sonini hisoblash uchun SQL (Pagination uchun)
+// Asosiy so'rovda ishlatilgani kabi bir xil filtrlash mantiqini qo'llash muhim
 $count_sql = "
     SELECT COUNT(DISTINCT a.id) 
     FROM articles a 
@@ -86,49 +156,13 @@ if (!empty($where_conditions)) {
     $count_sql .= " AND " . implode(" AND ", $where_conditions);
 }
 
+// Sanash so'rovi uchun ham xuddi shu parametrlardan foydalanish
 $stmt = $pdo->prepare($count_sql);
 $stmt->execute($params);
 $total_articles = $stmt->fetchColumn();
 $total_pages = ceil($total_articles / $articles_per_page);
 
-// Maqola holatini yangilash
-if (isset($_GET['change_status'])) {
-    $article_id = (int)$_GET['id'];
-    $new_status = $_GET['change_status'];
-    
-    $valid_statuses = ['pending', 'approved', 'rejected'];
-    if (in_array($new_status, $valid_statuses)) {
-        $pdo->prepare("UPDATE articles SET status = ?, published_at = NOW() WHERE id = ?")
-            ->execute([$new_status, $article_id]);
-        
-        $_SESSION['success_message'] = "Maqola holati yangilandi";
-        header("Location: articles.php?" . http_build_query($_GET));
-        exit();
-    }
-}
-
-// Maqolani o'chirish
-if (isset($_GET['delete'])) {
-    $article_id = (int)$_GET['delete'];
-    
-    // PDF faylni o'chirish
-    $stmt = $pdo->prepare("SELECT pdf_path FROM articles WHERE id = ?");
-    $stmt->execute([$article_id]);
-    $article = $stmt->fetch();
-    
-    if ($article && $article['pdf_path'] && file_exists("../uploads/articles/" . $article['pdf_path'])) {
-        unlink("../uploads/articles/" . $article['pdf_path']);
-    }
-    
-    // Maqolani o'chirish
-    $pdo->prepare("DELETE FROM articles WHERE id = ?")->execute([$article_id]);
-    
-    $_SESSION['success_message'] = "Maqola muvaffaqiyatli o'chirildi";
-    header("Location: articles.php?" . http_build_query($_GET));
-    exit();
-}
-
-// Kategoriyalar va mualliflarni olish
+// Kategoriyalar va mualliflarni olish (Filtrlar uchun)
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
 $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER BY name")->fetchAll();
 ?>
@@ -139,6 +173,7 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maqolalar Boshqaruvi - Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
         .table-responsive { 
@@ -149,36 +184,17 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
         .status-badge { font-size: 0.8em; }
         .action-buttons { white-space: nowrap; }
         .filter-card { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-         .sidebar {
-            background: rgba(0,0,0,0.9);
-            color: white;
-            min-height: 100vh;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        }
-        
-        .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.8);
-            padding: 12px 20px;
-            margin: 2px 0;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-        
-        .sidebar .nav-link:hover, 
-        .sidebar .nav-link.active {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }
-        
-        .sidebar .nav-link i {
-            width: 20px;
-            margin-right: 10px;
-        }
+      
     </style>
 </head>
 <body>
-    <?php include 'components/admin_header.php'; ?>
+    <?php 
+    // Mavjud GET parametrlaridan 'page' ni olib tashlash (pagination to'g'ri ishlashi uchun)
+    $current_filters = array_diff_key($_GET, ['page' => '', 'change_status' => '', 'delete' => '']); 
+    $filter_query_string = http_build_query($current_filters); 
+    
+    include 'components/admin_header.php'; 
+    ?>
     
     <div class="container-fluid">
         <div class="row">
@@ -192,9 +208,8 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                     </a>
                 </div>
 
-                <?php showMessage(); ?>
+                <?php showMessage(); // Xabar funksiyasi (ehtimol, includes/functions.php da aniqlangan) ?>
 
-                <!-- Filtrlar paneli -->
                 <div class="filter-card card mb-4">
                     <div class="card-body">
                         <form method="GET" class="row g-3">
@@ -253,7 +268,6 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                     </div>
                 </div>
 
-                <!-- Maqolalar jadvali -->
                 <div class="table-responsive">
                     <table class="table table-hover">
                         <thead class="table-dark">
@@ -275,22 +289,22 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                                         <td>
                                             <div class="fw-bold"><?php echo htmlspecialchars($article['title']); ?></div>
                                             <small class="text-muted">
-                                                <?php echo mb_substr(strip_tags($article['abstract']), 0, 100); ?>...
+                                                <?php echo mb_substr(strip_tags($article['abstract']), 0, 100, 'UTF-8'); ?>...
                                             </small>
                                         </td>
                                         <td>
                                             <div><?php echo htmlspecialchars($article['author_name']); ?></div>
-                                            <small class="text-muted"><?php echo $article['author_email']; ?></small>
+                                            <small class="text-muted"><?php echo htmlspecialchars($article['author_email']); ?></small>
                                         </td>
                                         <td>
-                                            <small><?php echo $article['categories'] ?: 'Kategoriya yo\'q'; ?></small>
+                                            <small><?php echo htmlspecialchars($article['categories'] ?: 'Kategoriya yo\'q'); ?></small>
                                         </td>
                                         <td>
                                             <span class="badge status-badge bg-<?php 
                                                 echo $article['status'] === 'approved' ? 'success' : 
                                                     ($article['status'] === 'pending' ? 'warning' : 'danger'); 
-                                            ?>">
-                                                <?php echo $article['status']; ?>
+                                                ?>">
+                                                <?php echo htmlspecialchars($article['status']); ?>
                                             </span>
                                             <?php if ($article['views'] > 0): ?>
                                                 <br><small class="text-muted"><?php echo $article['views']; ?> ko'rish</small>
@@ -306,31 +320,51 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                                         </td>
                                         <td class="action-buttons">
                                             <div class="btn-group btn-group-sm">
+                                                <?php 
+                                                // Barcha mavjud GET parametrlarini olish
+                                                $current_params = $_GET; 
+                                                // Faqat holatni o'zgartirish linklari uchun 'change_status' va 'id' ni qo'shish
+                                                ?>
+                                                
                                                 <?php if ($article['status'] === 'pending'): ?>
-                                                    <a href="articles.php?change_status=approved&id=<?php echo $article['id']; ?>&<?php echo http_build_query($_GET); ?>" 
-                                                       class="btn btn-success" title="Tasdiqlash">
+                                                    <?php 
+                                                    $approve_params = $current_params;
+                                                    $approve_params['change_status'] = 'approved';
+                                                    $approve_params['id'] = $article['id'];
+                                                    $reject_params = $current_params;
+                                                    $reject_params['change_status'] = 'rejected';
+                                                    $reject_params['id'] = $article['id'];
+                                                    ?>
+                                                    <a href="articles.php?<?php echo http_build_query($approve_params); ?>" 
+                                                        class="btn btn-success" title="Tasdiqlash">
                                                         <i class="bi bi-check"></i>
                                                     </a>
-                                                    <a href="articles.php?change_status=rejected&id=<?php echo $article['id']; ?>&<?php echo http_build_query($_GET); ?>" 
-                                                       class="btn btn-danger" title="Rad etish">
+                                                    <a href="articles.php?<?php echo http_build_query($reject_params); ?>" 
+                                                        class="btn btn-danger" title="Rad etish">
                                                         <i class="bi bi-x"></i>
                                                     </a>
                                                 <?php endif; ?>
                                                 
                                                 <a href="../article.php?id=<?php echo $article['id']; ?>" 
-                                                   target="_blank" class="btn btn-info" title="Ko'rish">
+                                                    target="_blank" class="btn btn-info" title="Ko'rish">
                                                     <i class="bi bi-eye"></i>
                                                 </a>
                                                 
                                                 <a href="article_edit.php?id=<?php echo $article['id']; ?>" 
-                                                   class="btn btn-warning" title="Tahrirlash">
+                                                    class="btn btn-warning" title="Tahrirlash">
                                                     <i class="bi bi-pencil"></i>
                                                 </a>
                                                 
-                                                <a href="articles.php?delete=<?php echo $article['id']; ?>&<?php echo http_build_query($_GET); ?>" 
-                                                   class="btn btn-danger" 
-                                                   onclick="return confirm('Maqolani o\'chirishni tasdiqlaysizmi? Bu amalni qaytarib bo\'lmaydi.')"
-                                                   title="O'chirish">
+                                                <?php 
+                                                $delete_params = $current_params;
+                                                $delete_params['delete'] = $article['id'];
+                                                // 'change_status' va 'id' parametrlari mavjud bo'lsa, ularni o'chirish linkidan olib tashlash
+                                                unset($delete_params['change_status'], $delete_params['id']);
+                                                ?>
+                                                <a href="articles.php?<?php echo http_build_query($delete_params); ?>" 
+                                                    class="btn btn-danger delete-btn" 
+                                                    data-article-id="<?php echo $article['id']; ?>"
+                                                    title="O'chirish">
                                                     <i class="bi bi-trash"></i>
                                                 </a>
                                             </div>
@@ -351,13 +385,18 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                     </table>
                 </div>
 
-                <!-- Pagination -->
                 <?php if ($total_pages > 1): ?>
                     <nav class="mt-4">
                         <ul class="pagination justify-content-center">
+                            <?php 
+                            // Pagination linklari uchun asosiy filtr satrini olish
+                            $pagination_params = array_diff_key($_GET, ['page' => '', 'change_status' => '', 'delete' => '']);
+                            $pagination_query_string = http_build_query($pagination_params);
+                            ?>
+                            
                             <?php if ($page > 1): ?>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $page-1; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $page-1; ?>&<?php echo $pagination_query_string; ?>">
                                         <i class="bi bi-chevron-left"></i> Oldingi
                                     </a>
                                 </li>
@@ -369,7 +408,7 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                             
                             for ($i = $start_page; $i <= $end_page; $i++): ?>
                                 <li class="page-item <?php echo $i == $page ? 'active' : ''; ?>">
-                                    <a class="page-link" href="?page=<?php echo $i; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $i; ?>&<?php echo $pagination_query_string; ?>">
                                         <?php echo $i; ?>
                                     </a>
                                 </li>
@@ -377,7 +416,7 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
 
                             <?php if ($page < $total_pages): ?>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $page+1; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $page+1; ?>&<?php echo $pagination_query_string; ?>">
                                         Keyingi <i class="bi bi-chevron-right"></i>
                                     </a>
                                 </li>
@@ -386,13 +425,12 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                     </nav>
                 <?php endif; ?>
 
-                <!-- Statistik ma'lumotlar -->
                 <div class="row mt-4">
                     <div class="col-md-3">
                         <div class="card text-white bg-primary">
                             <div class="card-body text-center">
                                 <h4><?php echo $total_articles; ?></h4>
-                                <p>Jami Maqolalar</p>
+                                <p>Jami Maqolalar (Filtrlangan)</p>
                             </div>
                         </div>
                     </div>
@@ -427,7 +465,7 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Tezkur holat o'zgartirish
+        // Tezkur holat o'zgartirish va o'chirish
         document.addEventListener('DOMContentLoaded', function() {
             // Holatni o'zgartirish tugmalari
             const statusButtons = document.querySelectorAll('a[href*="change_status"]');
@@ -438,11 +476,26 @@ $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER B
                     }
                 });
             });
+
+            // O'chirish tugmasi
+            const deleteButtons = document.querySelectorAll('.delete-btn');
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', function(e) {
+                    // PHP kodidagi confirm() funksiyasini saqlab qolish
+                    // if (!confirm('Maqolani o\'chirishni tasdiqlaysizmi? Bu amalni qaytarib bo\'lmaydi.')) {
+                    //     e.preventDefault();
+                    // }
+                    // Yuqoridagi PHP onclick ichida bo'lgani uchun bu yerda takrorlash shart emas
+                });
+            });
             
             // Avtomatik yangilash (faqat kutilayotgan maqolalar sahifasida)
             <?php if ($status_filter === 'pending'): ?>
                 setInterval(() => {
-                    window.location.reload();
+                    // Agar sahifada o'chirish yoki holatni o'zgartirish so'rovi yo'q bo'lsa yangilansin
+                    if (!window.location.search.includes('change_status') && !window.location.search.includes('delete')) {
+                        window.location.reload();
+                    }
                 }, 30000); // 30 soniyada bir
             <?php endif; ?>
         });

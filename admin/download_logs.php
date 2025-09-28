@@ -1,93 +1,87 @@
 <?php
+// require_once manzillarini o'zingizning loyiha tuzilishingizga moslang
 require_once '../includes/config.php';
 require_once '../includes/database.php';
 require_once '../includes/auth.php';
-require_once '../includes/functions.php';
+require_once '../includes/functions.php'; // showMessage() funksiyasi shu yerda bo'lishi kerak
 
+// --- ADMIN HUQUQLARINI TEKSHIRISH ---
 $auth->requireAdmin();
 
-// Filtrlar
+// --- YO'NALTIRISH UCHUN YORDAMCHI FUNKSIYA ---
+/**
+ * Hozirgi GET parametrlarini tozalab, filtr holatini saqlab qolgan holda URL query'sini yaratadi.
+ * @param array $exclude_keys URL'dan olib tashlanishi kerak bo'lgan kalitlar.
+ * @return string Qayta yo'naltirish uchun URL qismi (masalan, "?page=2&article_id=5").
+ */
+function build_clean_query($exclude_keys = []) {
+    $params = $_GET;
+    foreach ($exclude_keys as $key) {
+        unset($params[$key]);
+    }
+    // Agar boshqa GET parametrlari qolsa, ularni string qilib qaytaramiz
+    return empty($params) ? '' : '?' . http_build_query($params);
+}
+
+// --- FILTRLARNI OLISH ---
 $date_from = isset($_GET['date_from']) ? $_GET['date_from'] : '';
 $date_to = isset($_GET['date_to']) ? $_GET['date_to'] : '';
 $article_filter = isset($_GET['article_id']) ? (int)$_GET['article_id'] : 0;
 $ip_search = isset($_GET['ip_search']) ? trim($_GET['ip_search']) : '';
 
-// Pagination
+// --- PAGINATION PARAMETRLARI ---
 $logs_per_page = 20;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 $offset = ($page - 1) * $logs_per_page;
 
-// SQL so'rovini tayyorlash
-$sql = "
-    SELECT dl.*, 
-           a.title as article_title,
-           a.pdf_path,
-           u.name as author_name
-    FROM download_logs dl 
-    LEFT JOIN articles a ON dl.article_id = a.id 
-    LEFT JOIN users u ON a.author_id = u.id 
-    WHERE 1=1
-";
 
-$params = [];
-$where_conditions = [];
+// ===================================
+// --- O'CHIRISH VA EKSPORT AMALLARI ---
+// ===================================
 
-// Sana bo'yicha filtr
-if (!empty($date_from)) {
-    $where_conditions[] = "DATE(dl.downloaded_at) >= ?";
-    $params[] = $date_from;
+// Yakka logni o'chirish
+if (isset($_GET['delete'])) {
+    $log_id = (int)$_GET['delete'];
+    
+    // Xavfsiz o'chirish
+    $pdo->prepare("DELETE FROM download_logs WHERE id = ?")->execute([$log_id]);
+    
+    $_SESSION['success_message'] = "Log yozuvi muvaffaqiyatli o'chirildi.";
+    
+    // Delete parametrini olib tashlab, filtrlar bilan qayta yo'naltirish
+    header("Location: download_logs.php" . build_clean_query(['delete']));
+    exit();
 }
 
-if (!empty($date_to)) {
-    $where_conditions[] = "DATE(dl.downloaded_at) <= ?";
-    $params[] = $date_to;
+// Ko'p loglarni o'chirish
+if (isset($_POST['delete_selected'])) {
+    if (!empty($_POST['selected_logs']) && is_array($_POST['selected_logs'])) {
+        $selected_ids = array_map('intval', $_POST['selected_logs']);
+        $placeholders = str_repeat('?,', count($selected_ids) - 1) . '?';
+        
+        $sql = "DELETE FROM download_logs WHERE id IN ($placeholders)";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($selected_ids);
+        
+        $_SESSION['success_message'] = count($selected_ids) . " ta log yozuvi muvaffaqiyatli o'chirildi.";
+        // Filtrlarni saqlab qolib, qayta yo'naltirish
+        header("Location: download_logs.php" . build_clean_query(['page'])); // Sahifalashni 1-sahifaga qaytarish yaxshi amaliyot
+        exit();
+    } else {
+        $_SESSION['error_message'] = "O'chirish uchun hech qanday log tanlanmadi.";
+        header("Location: download_logs.php" . build_clean_query([]));
+        exit();
+    }
 }
 
-// Maqola bo'yicha filtr
-if ($article_filter > 0) {
-    $where_conditions[] = "dl.article_id = ?";
-    $params[] = $article_filter;
+// Barcha loglarni tozalash
+if (isset($_POST['clear_all'])) {
+    $pdo->query("TRUNCATE TABLE download_logs");
+    $_SESSION['success_message'] = "Barcha yuklab olish log yozuvlari tozalandi.";
+    header("Location: download_logs.php");
+    exit();
 }
-
-// IP bo'yicha qidiruv
-if (!empty($ip_search)) {
-    $where_conditions[] = "dl.ip_address LIKE ?";
-    $params[] = "%$ip_search%";
-}
-
-// WHERE shartlarini qo'shish
-if (!empty($where_conditions)) {
-    $sql .= " AND " . implode(" AND ", $where_conditions);
-}
-
-// Tartiblash
-$sql .= " ORDER BY dl.downloaded_at DESC LIMIT $logs_per_page OFFSET $offset";
-
-// Loglarni olish
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$logs = $stmt->fetchAll();
-
-// Jami loglar soni
-$count_sql = "
-    SELECT COUNT(*) 
-    FROM download_logs dl 
-    LEFT JOIN articles a ON dl.article_id = a.id 
-    WHERE 1=1
-";
-
-if (!empty($where_conditions)) {
-    $count_sql .= " AND " . implode(" AND ", $where_conditions);
-}
-
-$stmt = $pdo->prepare($count_sql);
-$stmt->execute($params);
-$total_logs = $stmt->fetchColumn();
-$total_pages = ceil($total_logs / $logs_per_page);
-
-// Maqolalarni olish (filtr uchun)
-$articles = $pdo->query("SELECT id, title FROM articles ORDER BY title")->fetchAll();
 
 // CSV eksport
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
@@ -97,6 +91,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     $output = fopen('php://output', 'w');
     fputcsv($output, ['ID', 'Maqola', 'Muallif', 'IP Manzil', 'Yuklab olingan vaqt', 'User Agent']);
     
+    // Eksport uchun barcha ma'lumotlarni so'rab oluvchi SQL
     $export_sql = "
         SELECT dl.id, a.title as article_title, u.name as author_name, 
                dl.ip_address, dl.downloaded_at, dl.user_agent
@@ -106,6 +101,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
         WHERE 1=1
     ";
     
+    // Eksportga ham filtrlarni qo'llash
     if (!empty($where_conditions)) {
         $export_sql .= " AND " . implode(" AND ", $where_conditions);
     }
@@ -130,38 +126,77 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     exit();
 }
 
-// Logni o'chirish
-if (isset($_GET['delete'])) {
-    $log_id = (int)$_GET['delete'];
-    
-    $pdo->prepare("DELETE FROM download_logs WHERE id = ?")->execute([$log_id]);
-    
-    $_SESSION['success_message'] = "Log yozuvi muvaffaqiyatli o'chirildi";
-    header("Location: download_logs.php?" . http_build_query($_GET));
-    exit();
+
+// =========================================
+// --- MA'LUMOTLARNI BAZADAN QAYTA OLISH ---
+// =========================================
+
+// SQL so'rovini tayyorlash (Loglar jadvali uchun)
+$sql = "
+    SELECT dl.*, 
+           a.title as article_title,
+           a.pdf_path,
+           u.name as author_name
+    FROM download_logs dl 
+    LEFT JOIN articles a ON dl.article_id = a.id 
+    LEFT JOIN users u ON a.author_id = u.id 
+    WHERE 1=1
+";
+
+$params = [];
+$where_conditions = [];
+
+// Sana bo'yicha filtr
+if (!empty($date_from)) {
+    $where_conditions[] = "DATE(dl.downloaded_at) >= ?";
+    $params[] = $date_from;
+}
+if (!empty($date_to)) {
+    $where_conditions[] = "DATE(dl.downloaded_at) <= ?";
+    $params[] = $date_to;
+}
+// Maqola bo'yicha filtr
+if ($article_filter > 0) {
+    $where_conditions[] = "dl.article_id = ?";
+    $params[] = $article_filter;
+}
+// IP bo'yicha qidiruv
+if (!empty($ip_search)) {
+    $where_conditions[] = "dl.ip_address LIKE ?";
+    $params[] = "%$ip_search%";
 }
 
-// Ko'p loglarni o'chirish
-if (isset($_POST['delete_selected'])) {
-    if (!empty($_POST['selected_logs'])) {
-        $placeholders = str_repeat('?,', count($_POST['selected_logs']) - 1) . '?';
-        $sql = "DELETE FROM download_logs WHERE id IN ($placeholders)";
-        $stmt = $pdo->prepare($sql);
-        $stmt->execute($_POST['selected_logs']);
-        
-        $_SESSION['success_message'] = count($_POST['selected_logs']) . " ta log yozuvi muvaffaqiyatli o'chirildi";
-        header("Location: download_logs.php?" . http_build_query($_GET));
-        exit();
-    }
+// WHERE shartlarini qo'shish
+if (!empty($where_conditions)) {
+    $sql .= " AND " . implode(" AND ", $where_conditions);
 }
 
-// Barcha loglarni tozalash
-if (isset($_POST['clear_all'])) {
-    $pdo->query("DELETE FROM download_logs");
-    $_SESSION['success_message'] = "Barcha log yozuvlari tozalandi";
-    header("Location: download_logs.php");
-    exit();
+// Tartiblash va Pagination
+$sql .= " ORDER BY dl.downloaded_at DESC LIMIT $logs_per_page OFFSET $offset";
+
+// Loglarni olish
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Jami loglar sonini hisoblash (Pagination uchun)
+$count_sql = "SELECT COUNT(dl.id) FROM download_logs dl WHERE 1=1";
+if (!empty($where_conditions)) {
+    $count_sql .= " AND " . implode(" AND ", $where_conditions);
 }
+
+$stmt = $pdo->prepare($count_sql);
+$stmt->execute($params);
+$total_logs = $stmt->fetchColumn();
+$total_pages = ceil($total_logs / $logs_per_page);
+
+// Barcha maqolalarni olish (filtr uchun)
+$articles = $pdo->query("SELECT id, title FROM articles ORDER BY title")->fetchAll(PDO::FETCH_ASSOC);
+
+// Statistik ma'lumotlarni olish
+$unique_ips = $pdo->query("SELECT COUNT(DISTINCT ip_address) FROM download_logs")->fetchColumn();
+$unique_articles = $pdo->query("SELECT COUNT(DISTINCT article_id) FROM download_logs")->fetchColumn();
+$today_logs = $pdo->query("SELECT COUNT(*) FROM download_logs WHERE DATE(downloaded_at) = CURDATE()")->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="uz">
@@ -171,9 +206,10 @@ if (isset($_POST['clear_all'])) {
     <title>Yuklab Olish Loglari - Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css"> 
 
     <style>
+        /* CSS kodlari o'zgarishsiz qoldirildi, ular yaxshi. */
         .table-responsive { 
             background: white; 
             border-radius: 10px; 
@@ -199,9 +235,6 @@ if (isset($_POST['clear_all'])) {
         .stat-card:hover {
             transform: translateY(-2px);
         }
-   
-        
-        
     </style>
 </head>
 <body>
@@ -215,16 +248,19 @@ if (isset($_POST['clear_all'])) {
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <h1 class="h3 mb-0">Yuklab Olish Loglari</h1>
                     <div class="btn-group">
-                        <a href="download_logs.php?export=csv&<?php echo http_build_query($_GET); ?>" 
+                        <?php 
+                        // CSV Export uchun faqat filtr parametrlarini yig'ish
+                        $csv_query = http_build_query(array_diff_key($_GET, array_flip(['export', 'delete', 'page'])));
+                        ?>
+                        <a href="download_logs.php?export=csv<?php echo !empty($csv_query) ? '&' . $csv_query : ''; ?>" 
                            class="btn btn-success">
-                            <i class="bi bi-download me-1"></i> CSV Export
+                             <i class="bi bi-download me-1"></i> CSV Export
                         </a>
                     </div>
                 </div>
 
                 <?php showMessage(); ?>
 
-                <!-- Statistik ma'lumotlar -->
                 <div class="row mb-4">
                     <div class="col-md-3">
                         <div class="card text-white bg-primary stat-card">
@@ -237,7 +273,7 @@ if (isset($_POST['clear_all'])) {
                     <div class="col-md-3">
                         <div class="card text-white bg-success stat-card">
                             <div class="card-body text-center">
-                                <h4><?php echo $pdo->query("SELECT COUNT(DISTINCT ip_address) FROM download_logs")->fetchColumn(); ?></h4>
+                                <h4><?php echo $unique_ips; ?></h4>
                                 <p>Unikal IP Manzillar</p>
                             </div>
                         </div>
@@ -245,7 +281,7 @@ if (isset($_POST['clear_all'])) {
                     <div class="col-md-3">
                         <div class="card text-white bg-info stat-card">
                             <div class="card-body text-center">
-                                <h4><?php echo $pdo->query("SELECT COUNT(DISTINCT article_id) FROM download_logs")->fetchColumn(); ?></h4>
+                                <h4><?php echo $unique_articles; ?></h4>
                                 <p>Yuklangan Maqolalar</p>
                             </div>
                         </div>
@@ -253,17 +289,13 @@ if (isset($_POST['clear_all'])) {
                     <div class="col-md-3">
                         <div class="card text-white bg-warning stat-card">
                             <div class="card-body text-center">
-                                <h4><?php 
-                                    $today = $pdo->query("SELECT COUNT(*) FROM download_logs WHERE DATE(downloaded_at) = CURDATE()")->fetchColumn();
-                                    echo $today;
-                                ?></h4>
+                                <h4><?php echo $today_logs; ?></h4>
                                 <p>Bugungi Yuklab Olishlar</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Filtrlar paneli -->
                 <div class="filter-card card mb-4">
                     <div class="card-body">
                         <form method="GET" class="row g-3">
@@ -303,7 +335,6 @@ if (isset($_POST['clear_all'])) {
                     </div>
                 </div>
 
-                <!-- Ko'p tanlash va o'chirish -->
                 <form method="POST" id="logsForm">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <div class="form-check">
@@ -313,12 +344,12 @@ if (isset($_POST['clear_all'])) {
                             </label>
                         </div>
                         <button type="submit" name="delete_selected" class="btn btn-danger btn-sm" 
+                                title="Tanlangan log yozuvlarini o'chirish"
                                 onclick="return confirm('Tanlangan log yozuvlarini o\'chirishni tasdiqlaysizmi?')">
                             <i class="bi bi-trash me-1"></i> Tanlanganlarni O'chirish
                         </button>
                     </div>
 
-                    <!-- Loglar jadvali -->
                     <div class="table-responsive">
                         <table class="table table-hover">
                             <thead class="table-dark">
@@ -341,7 +372,7 @@ if (isset($_POST['clear_all'])) {
                                         <tr class="log-row">
                                             <td>
                                                 <input type="checkbox" class="form-check-input log-checkbox" 
-                                                       name="selected_logs[]" value="<?php echo $log['id']; ?>">
+                                                             name="selected_logs[]" value="<?php echo $log['id']; ?>">
                                             </td>
                                             <td><?php echo $log['id']; ?></td>
                                             <td>
@@ -370,21 +401,25 @@ if (isset($_POST['clear_all'])) {
                                             <td class="action-buttons">
                                                 <div class="btn-group btn-group-sm">
                                                     <button type="button" class="btn btn-info view-log" 
-                                                            data-bs-toggle="modal" data-bs-target="#logDetailModal"
-                                                            data-article="<?php echo htmlspecialchars($log['article_title']); ?>"
-                                                            data-author="<?php echo htmlspecialchars($log['author_name']); ?>"
-                                                            data-ip="<?php echo htmlspecialchars($log['ip_address']); ?>"
-                                                            data-useragent="<?php echo htmlspecialchars($log['user_agent']); ?>"
-                                                            data-date="<?php echo date('d.m.Y H:i', strtotime($log['downloaded_at'])); ?>"
-                                                            title="Batafsil">
+                                                                    data-bs-toggle="modal" data-bs-target="#logDetailModal"
+                                                                    data-article="<?php echo htmlspecialchars($log['article_title'] ?: 'O\'chirilgan maqola'); ?>"
+                                                                    data-author="<?php echo htmlspecialchars($log['author_name'] ?: 'Noma\'lum'); ?>"
+                                                                    data-ip="<?php echo htmlspecialchars($log['ip_address']); ?>"
+                                                                    data-useragent="<?php echo htmlspecialchars($log['user_agent']); ?>"
+                                                                    data-date="<?php echo date('d.m.Y H:i', strtotime($log['downloaded_at'])); ?>"
+                                                                    title="Batafsil">
                                                         <i class="bi bi-eye"></i>
                                                     </button>
                                                     
-                                                    <a href="download_logs.php?delete=<?php echo $log['id']; ?>&<?php echo http_build_query($_GET); ?>" 
+                                                    <?php 
+                                                    // Yakka o'chirish uchun filtr parametrlarini saqlab qolish
+                                                    $delete_link = "download_logs.php?delete={$log['id']}" . build_clean_query(['delete']);
+                                                    ?>
+                                                    <a href="<?php echo $delete_link; ?>" 
                                                        class="btn btn-danger" 
                                                        onclick="return confirm('Log yozuvini o\'chirishni tasdiqlaysizmi?')"
                                                        title="O'chirish">
-                                                        <i class="bi bi-trash"></i>
+                                                         <i class="bi bi-trash"></i>
                                                     </a>
                                                 </div>
                                             </td>
@@ -405,13 +440,18 @@ if (isset($_POST['clear_all'])) {
                     </div>
                 </form>
 
-                <!-- Pagination -->
                 <?php if ($total_pages > 1): ?>
                     <nav class="mt-4">
                         <ul class="pagination justify-content-center">
+                            <?php 
+                            // Pagination linklari uchun toza GET parametrlarini yig'ish (faqat filtrlar, 'page'siz)
+                            $base_query = http_build_query(array_diff_key($_GET, array_flip(['page', 'delete', 'export'])));
+                            $query_prefix = !empty($base_query) ? '&' . $base_query : '';
+                            ?>
+
                             <?php if ($page > 1): ?>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $page-1; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $page-1; ?><?php echo $query_prefix; ?>">
                                         <i class="bi bi-chevron-left"></i> Oldingi
                                     </a>
                                 </li>
@@ -423,7 +463,7 @@ if (isset($_POST['clear_all'])) {
                             
                             for ($i = $start_page; $i <= $end_page; $i++): ?>
                                 <li class="page-item <?php echo $i == $page ? 'active' : ''; ?>">
-                                    <a class="page-link" href="?page=<?php echo $i; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $i; ?><?php echo $query_prefix; ?>">
                                         <?php echo $i; ?>
                                     </a>
                                 </li>
@@ -431,7 +471,7 @@ if (isset($_POST['clear_all'])) {
 
                             <?php if ($page < $total_pages): ?>
                                 <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $page+1; ?>&<?php echo http_build_query(array_diff_key($_GET, ['page' => ''])); ?>">
+                                    <a class="page-link" href="?page=<?php echo $page+1; ?><?php echo $query_prefix; ?>">
                                         Keyingi <i class="bi bi-chevron-right"></i>
                                     </a>
                                 </li>
@@ -443,7 +483,6 @@ if (isset($_POST['clear_all'])) {
         </div>
     </div>
 
-    <!-- Log detail modali -->
     <div class="modal fade" id="logDetailModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
@@ -482,7 +521,6 @@ if (isset($_POST['clear_all'])) {
         </div>
     </div>
 
-    <!-- Barchasini tozalash modali -->
     <div class="modal fade" id="clearAllModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -516,40 +554,52 @@ if (isset($_POST['clear_all'])) {
             const selectAll = document.getElementById('selectAll');
             const logCheckboxes = document.querySelectorAll('.log-checkbox');
             
-            selectAllHeader.addEventListener('change', function() {
-                const isChecked = this.checked;
+            // Bosh Checkboxlarni sinxronlash
+            const syncCheckboxes = (isChecked) => {
                 logCheckboxes.forEach(checkbox => {
                     checkbox.checked = isChecked;
                 });
                 selectAll.checked = isChecked;
+                selectAllHeader.checked = isChecked;
+            };
+
+            selectAllHeader.addEventListener('change', function() {
+                syncCheckboxes(this.checked);
             });
             
             selectAll.addEventListener('change', function() {
-                const isChecked = this.checked;
-                logCheckboxes.forEach(checkbox => {
-                    checkbox.checked = isChecked;
-                });
-                selectAllHeader.checked = isChecked;
+                syncCheckboxes(this.checked);
             });
-            
-            // Log detail modali
-            const viewButtons = document.querySelectorAll('.view-log');
-            viewButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    document.getElementById('logArticle').textContent = this.dataset.article || 'O\'chirilgan maqola';
-                    document.getElementById('logAuthor').textContent = this.dataset.author || 'Noma\'lum';
-                    document.getElementById('logIp').textContent = this.dataset.ip;
-                    document.getElementById('logDate').textContent = this.dataset.date;
-                    document.getElementById('logUserAgent').textContent = this.dataset.useragent;
+
+            // Agar barcha pastki checkboxlar tanlansa, bosh checkboxlarni belgilash
+            logCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const allChecked = Array.from(logCheckboxes).every(cb => cb.checked);
+                    selectAll.checked = allChecked;
+                    selectAllHeader.checked = allChecked;
                 });
             });
             
-            // Formni yuborish
+            // Log detail modali ma'lumotlarni yuklash
+            const logDetailModal = document.getElementById('logDetailModal');
+            logDetailModal.addEventListener('show.bs.modal', function(event) {
+                const button = event.relatedTarget;
+                
+                document.getElementById('logArticle').textContent = button.dataset.article || 'Noma\'lum';
+                document.getElementById('logAuthor').textContent = button.dataset.author || 'Noma\'lum';
+                document.getElementById('logIp').textContent = button.dataset.ip;
+                document.getElementById('logDate').textContent = button.dataset.date;
+                document.getElementById('logUserAgent').textContent = button.dataset.useragent;
+            });
+            
+            // Ko'p loglarni o'chirish uchun forma tekshiruvi (agar hech narsa tanlanmagan bo'lsa)
             document.getElementById('logsForm').addEventListener('submit', function(e) {
-                const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
-                if (checkedBoxes.length === 0 && e.submitter.name === 'delete_selected') {
-                    e.preventDefault();
-                    alert('Hech qanday log yozuvi tanlanmagan!');
+                if (e.submitter && e.submitter.name === 'delete_selected') {
+                    const checkedBoxes = document.querySelectorAll('.log-checkbox:checked');
+                    if (checkedBoxes.length === 0) {
+                        e.preventDefault();
+                        alert('Iltimos, o\'chirish uchun kamida bitta log yozuvini tanlang!');
+                    }
                 }
             });
         });

@@ -352,60 +352,80 @@ $current_page = basename($_SERVER['PHP_SELF']);
 </head>
 <body>
     <!-- Top Bar -->
-    <div class="bg-dark text-white py-2 small">
-        <div class="container">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <div class="d-flex align-items-center">
-                        <i class="bi bi-journals text-primary me-2"></i>
-                        <span><?php echo $total_articles; ?> 
-                            <?php 
-                            if ($current_language == 'uz') echo 'maqola';
-                            elseif ($current_language == 'ru') echo 'статей';
-                            else echo 'articles';
-                            ?>
-                        </span>
+<div class="bg-dark text-white py-2 small">
+    <div class="container">
+        <div class="row align-items-center">
+            <!-- Chap taraf: Ma'lumotlar -->
+            <div class="col-md-6">
+                <div class="d-flex align-items-center flex-wrap">
+                    <!-- NamDTU sahifasi -->
+                    <a href="https://namdtu.uz/" target="_blank" class="text-white text-decoration-none">
+                        <h4 class="px-2 m-0">NamDTU</h4>
+                    </a>
+
+                    <!-- Maqola soni -->
+                    <i class="bi bi-journals text-primary me-2 ms-3"></i>
+                    <span><?php echo $total_articles; ?> 
+                        <?php 
+                        if ($current_language == 'uz') echo 'maqola';
+                        elseif ($current_language == 'ru') echo 'статей';
+                        else echo 'articles';
+                        ?>
+                    </span>
+
+                    <!-- Jurnal soni -->
+                    <span class="mx-2">•</span>
+                    <i class="bi bi-collection text-success me-2"></i>
+                    <span><?php echo $total_issues; ?> 
+                        <?php 
+                        if ($current_language == 'uz') echo 'jurnal soni';
+                        elseif ($current_language == 'ru') echo 'выпусков';
+                        else echo 'issues';
+                        ?>
+                    </span>
+
+                    <!-- Foydalanuvchi maqolalari -->
+                    <?php if (isset($_SESSION['user_id']) && $user_articles_count > 0): ?>
                         <span class="mx-2">•</span>
-                        <i class="bi bi-collection text-success me-2"></i>
-                        <span><?php echo $total_issues; ?> 
+                        <i class="bi bi-file-text text-warning me-2"></i>
+                        <span><?php echo $user_articles_count; ?> 
                             <?php 
-                            if ($current_language == 'uz') echo 'jurnal soni';
-                            elseif ($current_language == 'ru') echo 'выпусков';
-                            else echo 'issues';
+                            if ($current_language == 'uz') echo 'mening maqolalarim';
+                            elseif ($current_language == 'ru') echo 'мои статьи';
+                            else echo 'my articles';
                             ?>
                         </span>
-                        
-                        <?php if (isset($_SESSION['user_id']) && $user_articles_count > 0): ?>
-                            <span class="mx-2">•</span>
-                            <i class="bi bi-file-text text-warning me-2"></i>
-                            <span><?php echo $user_articles_count; ?> 
-                                <?php 
-                                if ($current_language == 'uz') echo 'mening maqolalarim';
-                                elseif ($current_language == 'ru') echo 'мои статьи';
-                                else echo 'my articles';
-                                ?>
-                            </span>
-                        <?php endif; ?>
-                    </div>
+                    <?php endif; ?>
                 </div>
-                <div class="col-md-6 text-end">
-                    <div class="d-flex align-items-center justify-content-end">
-                        <span class="me-2"><?php echo getTranslation('language'); ?>:</span>
-                        <div class="btn-group">
-                            <?php foreach ($languages as $lang): ?>
-                                <a href="?lang=<?php echo $lang['code']; ?>" 
-                                   class="btn btn-sm <?php echo $current_language == $lang['code'] ? 'btn-primary' : 'btn-outline-light'; ?>"
-                                   title="<?php echo $lang['name']; ?>">
-                                    <span class="language-flag flag-<?php echo $lang['code']; ?>"></span>
-                                    <?php echo strtoupper($lang['code']); ?>
-                                </a>
-                            <?php endforeach; ?>
-                        </div>
+            </div>
+
+            <!-- O'ng taraf: Tillar va Location -->
+            <div class="col-md-6 text-end">
+                <div class="d-flex align-items-center justify-content-end flex-wrap">
+                    <!-- Til tanlash -->
+                    <span class="me-2"><?php echo getTranslation('language'); ?>:</span>
+                    <div class="btn-group gap-2">
+                        <?php foreach ($languages as $lang): ?>
+                            <a href="?lang=<?php echo $lang['code']; ?>" 
+                               class="btn btn-sm <?php echo $current_language == $lang['code'] ? 'btn-primary' : 'btn-outline-light'; ?>"
+                               title="<?php echo $lang['name']; ?>">
+                                <span class="language-flag flag-<?php echo $lang['code']; ?>"></span>
+                                <?php echo strtoupper($lang['code']); ?>
+                            </a>
+                        <?php endforeach; ?>
                     </div>
+
+                    <!-- Location sahifasiga link -->
+                    <a href="location.php" class="text-white text-decoration-none">
+                        <h5 class="px-3 m-0"><?php echo getTranslation('location'); ?></h5>
+                    </a>
                 </div>
             </div>
         </div>
     </div>
+</div>
+
+    
 
     <!-- Asosiy Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
@@ -479,36 +499,17 @@ $current_page = basename($_SERVER['PHP_SELF']);
                             <i class="bi bi-envelope me-1"></i><?php echo getTranslation('contact'); ?>
                         </a>
                     </li>
-                </ul>
-                
-                <!-- Qidiruv Formasi -->
-                <!-- <form class="d-flex search-form me-3" action="search.php" method="GET">
-                    <div class="input-group">
-                        <input type="text" class="form-control" name="q" placeholder="<?php echo getTranslation('search'); ?>" 
-                               aria-label="Search" value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>">
-                        <button class="btn btn-light" type="submit">
-                            <i class="bi bi-search"></i>
-                        </button>
-                    </div>
-                </form> -->
-                
+                </ul>            
                 <!-- User Menu -->
                 <ul class="navbar-nav">
                     <?php if (isset($_SESSION['user_id']) && $user_data): ?>
-                        <!-- Notification Icon -->
-                        <!-- <li class="nav-item position-relative me-3">
-                            <a class="nav-link" href="notifications.php" title="<?php echo $current_language == 'uz' ? 'Bildirishnomalar' : 
-                                                                               ($current_language == 'ru' ? 'Уведомления' : 'Notifications'); ?>">
-                                <i class="bi bi-bell fs-5"></i>
-                           
-                            </a>
-                        </li> -->
+                      
                         
                         <!-- User Dropdown -->
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
                                 <?php if ($user_data['profile_image']): ?>
-                                    <img src="uploads/<?php echo $user_data['profile_image']; ?>" 
+                                    <img src="uploads/profiles/<?php echo $user_data['profile_image']; ?>" 
                                          alt="<?php echo htmlspecialchars($user_data['name']); ?>" 
                                          class="user-avatar me-2">
                                 <?php else: ?>
@@ -535,7 +536,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
                                     <div class="dropdown-header">
                                         <div class="d-flex align-items-center">
                                             <?php if ($user_data['profile_image']): ?>
-                                                <img src="uploads/<?php echo $user_data['profile_image']; ?>" 
+                                                <img src="uploads/profiles/<?php echo $user_data['profile_image']; ?>" 
                                                      alt="<?php echo htmlspecialchars($user_data['name']); ?>" 
                                                      class="user-avatar me-2">
                                             <?php else: ?>

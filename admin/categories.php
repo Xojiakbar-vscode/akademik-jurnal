@@ -100,36 +100,13 @@ if (isset($_GET['edit'])) {
     <title>Kategoriyalar Boshqaruvi - Akademik Jurnal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="style.css">
+
     <style>
         body {
             background-color: #f8f9fa;
         }
-        .sidebar {
-            background: rgba(0,0,0,0.9);
-            color: white;
-            min-height: 100vh;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        }
-        
-        .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.8);
-            padding: 12px 20px;
-            margin: 2px 0;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-        
-        .sidebar .nav-link:hover, 
-        .sidebar .nav-link.active {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }
-        
-        .sidebar .nav-link i {
-            width: 20px;
-            margin-right: 10px;
-        }
+      
     </style>
 </head>
 <body>

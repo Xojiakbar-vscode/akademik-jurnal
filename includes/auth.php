@@ -51,6 +51,23 @@ class Auth {
             exit();
         }
     }
+
+    // 🔽 Yangi qo'shilgan metodlar
+    public function getUserID() {
+        return $_SESSION['user_id'] ?? null;
+    }
+
+    public function getUserName() {
+        return $_SESSION['user_name'] ?? null;
+    }
+
+    public function getUserRole() {
+        return $_SESSION['user_role'] ?? null;
+    }
+
+    public function getUserEmail() {
+        return $_SESSION['user_email'] ?? null;
+    }
 }
 
 $auth = new Auth($pdo);

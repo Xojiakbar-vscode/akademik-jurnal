@@ -178,70 +178,9 @@ foreach ($issues as $issue) {
     <title>Jurnal Sonlari Boshqaruvi - Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <style>
-        .issue-card {
-            transition: transform 0.3s ease;
-            border: 1px solid #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .issue-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }
-        .cover-image {
-            height: 200px;
-            background-size: cover;
-            background-position: center;
-        }
-        .stats-badge {
-            font-size: 0.8em;
-        }
-        .action-buttons {
-            white-space: nowrap;
-        }
-        .pdf-indicator {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(220, 53, 69, 0.9);
-            color: white;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 0.7rem;
-        }
-        .file-info {
-            background: #f8f9fa;
-            border-radius: 5px;
-            padding: 10px;
-            margin-top: 10px;
-        }
-         .sidebar {
-            background: rgba(0,0,0,0.9);
-            color: white;
-            min-height: 100vh;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        }
-        
-        .sidebar .nav-link {
-            color: rgba(255, 255, 255, 0.8);
-            padding: 12px 20px;
-            margin: 2px 0;
-            border-radius: 5px;
-            transition: all 0.3s ease;
-        }
-        
-        .sidebar .nav-link:hover, 
-        .sidebar .nav-link.active {
-            color: white;
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateX(5px);
-        }
-        
-        .sidebar .nav-link i {
-            width: 20px;
-            margin-right: 10px;
-        }
+    <link rel="stylesheet" href="style.css">
+
+    <style>    
     </style>
 </head>
 <body>

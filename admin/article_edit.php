@@ -26,7 +26,11 @@ if (isset($_GET['id'])) {
 
 // Kategoriyalarni olish
 $categories = $pdo->query("SELECT * FROM categories ORDER BY name")->fetchAll();
-$authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER BY name")->fetchAll();
+// Oldingi kod: Faqat 'author' rollisini chiqaradi
+// $authors = $pdo->query("SELECT id, name FROM users WHERE role = 'author' ORDER BY name")->fetchAll();
+
+// YANGI KOD: Barcha roldagi (admin, author, user) foydalanuvchilarni chiqaradi
+$authors = $pdo->query("SELECT id, name FROM users ORDER BY name")->fetchAll();
 
 // Formani qayta ishlash
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -126,9 +130,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <link href="https://cdn.jsdelivr.net/npm/summernote@0.8.18/dist/summernote-lite.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
     <style>
         .editor-container { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .required-label::after { content: " *"; color: red; }
+        
+     
     </style>
 </head>
 <body>

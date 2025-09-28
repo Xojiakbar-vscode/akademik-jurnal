@@ -22,7 +22,12 @@ $slider_data = [
         'link_text_uz' => "Maqolalarni ko'rish",
         'link_text_en' => "Browse Articles",
         'link_text_ru' => "Просмотреть статьи",
-        'link_url' => "articles.php"
+        'link_url' => "articles.php",
+        'link' => 'about.php',
+        'link_uz' => 'Jurnal talabilari',
+        'link_en' => 'Journal Policies',
+        'link_ru' => 'Политика журнала'
+
     ],
     [
         'id' => 2,
@@ -39,7 +44,11 @@ $slider_data = [
         'link_text_uz' => "Maqola topshirish",
         'link_text_en' => "Submit an Article",
         'link_text_ru' => "Отправить статью",
-        'link_url' => "submit-article.php"
+        'link_url' => "submit-article.php",
+        'link' => 'about.php',
+        'link_uz' => 'Jurnal talabilari',
+        'link_en' => 'Journal Policies',
+        'link_ru' => 'Политика журнала'
     ],
     [
         'id' => 3,
@@ -56,7 +65,12 @@ $slider_data = [
         'link_text_uz' => "Barcha sonlarni ko'rish",
         'link_text_en' => "View All Issues",
         'link_text_ru' => "Просмотреть все выпуски",
-        'link_url' => "issues.php"
+        'link_url' => "issues.php",
+        'link' => 'about.php',
+        'link_uz' => 'Jurnal talabilari',
+        'link_en' => 'Journal Policies',
+        'link_ru' => 'Политика журнала'
+        
     ],
 ];
 
@@ -99,6 +113,7 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo $current_lang; ?>">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -107,10 +122,13 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
         .hero-section {
-            padding: 0; /* Bootstrap Carousel o'zi paddingni boshqaradi */
+            padding: 0;
+            /* Bootstrap Carousel o'zi paddingni boshqaradi */
         }
+
         .carousel-item {
-            height: 500px; /* Slider balandligi */
+            height: 500px;
+            /* Slider balandligi */
             min-height: 300px;
             background: no-repeat center center scroll;
             -webkit-background-size: cover;
@@ -118,19 +136,22 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
             -o-background-size: cover;
             background-size: cover;
         }
+
         .carousel-caption-overlay {
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
             bottom: 0;
-            background: rgba(10, 35, 66, 0.7); /* Fon uchun yarim shaffof qatlam */
+            background: rgba(10, 35, 66, 0.7);
+            /* Fon uchun yarim shaffof qatlam */
             display: flex;
             align-items: center;
             justify-content: center;
             text-align: center;
             padding: 50px;
         }
+
         .carousel-caption {
             position: relative;
             z-index: 10;
@@ -141,25 +162,30 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
             left: auto;
             right: auto;
         }
+
         /* Qolgan stillar avvalgidek qoldi */
         .stat-card {
             background: white;
             border-radius: 10px;
             padding: 30px;
             text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s;
         }
+
         .stat-card:hover {
             transform: translateY(-5px);
         }
+
         .article-card {
             transition: transform 0.3s;
             height: 100%;
         }
+
         .article-card:hover {
             transform: translateY(-5px);
         }
+
         .category-badge {
             background: #2CA58D;
             color: white;
@@ -167,25 +193,29 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
             border-radius: 20px;
             font-size: 0.9em;
         }
+
         .editorial-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 30px;
             margin-top: 50px;
         }
+
         .editor-card {
             background: white;
             border-radius: 15px;
             padding: 30px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             transition: transform 0.3s, box-shadow 0.3s;
             height: 100%;
         }
+
         .editor-card:hover {
             transform: translateY(-10px);
-            box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
         }
+
         .editor-img {
             width: 120px;
             height: 120px;
@@ -195,30 +225,36 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
             background-position: center;
             border: 5px solid #f8f9fa;
         }
+
         .editor-name {
             font-weight: 700;
             color: #2c3e50;
             margin-bottom: 5px;
         }
+
         .editor-position {
             color: #2CA58D;
             font-weight: 600;
             margin-bottom: 10px;
         }
+
         .editor-bio {
             font-style: italic;
             color: #6c757d;
             margin-top: 15px;
         }
+
         .section-header {
             text-align: center;
             margin-bottom: 50px;
         }
+
         .section-title {
             font-weight: 700;
             color: #2c3e50;
             margin-bottom: 15px;
         }
+
         .author-stats {
             background: #f8f9fa;
             padding: 10px 15px;
@@ -228,6 +264,7 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
         }
     </style>
 </head>
+
 <body>
     <?php include 'components/header.php'; ?>
 
@@ -235,24 +272,47 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
         <div id="heroCarousel" class="carousel slide" data-bs-ride="carousel" data-bs-interval="5000">
             <div class="carousel-indicators">
                 <?php foreach ($slider_data as $index => $slide): ?>
-                    <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="<?php echo $index; ?>" class="<?php echo ($index === 0) ? 'active' : ''; ?>" aria-current="<?php echo ($index === 0) ? 'true' : 'false'; ?>" aria-label="Slide <?php echo $index + 1; ?>"></button>
+                    <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="<?php echo $index; ?>"
+                        class="<?php echo ($index === 0) ? 'active' : ''; ?>"
+                        aria-current="<?php echo ($index === 0) ? 'true' : 'false'; ?>"
+                        aria-label="Slide <?php echo $index + 1; ?>"></button>
                 <?php endforeach; ?>
             </div>
 
             <div class="carousel-inner">
                 <?php foreach ($slider_data as $index => $slide): ?>
-                <div class="carousel-item <?php echo ($index === 0) ? 'active' : ''; ?>" style="background-image: url('<?php echo htmlspecialchars($slide['image']); ?>');">
-                    <div class="carousel-caption-overlay">
-                        <div class="carousel-caption d-none d-md-block">
-                <h1 class=""><?php echo htmlspecialchars($slide['header_' . $current_lang] ?? $slide['header_uz']) ?></h1>
-                            <h2 class="display-4 fw-bold mb-4"><?php echo htmlspecialchars($slide['title_' . $current_lang] ?? $slide['title_uz']); ?></h2>
-                            <p class="lead mb-5"><?php echo htmlspecialchars($slide['text_' . $current_lang] ?? $slide['text_uz']); ?></p>
-                            <a href="<?php echo htmlspecialchars($slide['link_url']); ?>" class="btn btn-primary btn-lg px-4">
-                                <i class="bi bi-arrow-right-circle me-2"></i><?php echo htmlspecialchars($slide['link_text_' . $current_lang] ?? $slide['link_text_uz']); ?>
-                            </a>
+                    <div class="carousel-item <?php echo ($index === 0) ? 'active' : ''; ?>"
+                        style="background-image: url('<?php echo htmlspecialchars($slide['image']); ?>');">
+                        <div class="carousel-caption-overlay">
+                            <div class="carousel-caption d-none d-md-block">
+                                <h1 class="">
+                                    <?php echo htmlspecialchars($slide['header_' . $current_lang] ?? $slide['header_uz']) ?>
+                                </h1>
+                                <h2 class="display-4 fw-bold mb-4">
+                                    <?php echo htmlspecialchars($slide['title_' . $current_lang] ?? $slide['title_uz']); ?>
+                                </h2>
+                                <p class="lead mb-5">
+                                    <?php echo htmlspecialchars($slide['text_' . $current_lang] ?? $slide['text_uz']); ?>
+                                </p>
+                                <div class="d-flex flex-column align-items-center justify-content-center gap-4">
+                                    <!-- Birinchi tugma -->
+                                    <a href="<?php echo htmlspecialchars($slide['link_url']); ?>"
+                                        class="btn btn-primary btn-lg px-4 py-2 d-flex align-items-center gap-2 w-10 w-sm-auto">
+                                        <i class="bi bi-arrow-right-circle me-2"></i>
+                                        <span><?php echo htmlspecialchars($slide['link_text_' . $current_lang] ?? $slide['link_text_uz']); ?></span>
+                                    </a>
+
+                                    <!-- Ikkinchi tugma -->
+                                    <a href="<?php echo htmlspecialchars($slide['link']); ?>"
+                                        class="btn btn-primary btn-lg px-4 py-2 d-flex align-items-center gap-2 w-10 w-sm-auto">
+                                        <i class="bi bi-arrow-right-circle me-2"></i>
+                                        <span><?php echo htmlspecialchars($slide['link_' . $current_lang] ?? $slide['link_uz']); ?></span>
+                                    </a>
+                                </div>
+
+                            </div>
                         </div>
                     </div>
-                </div>
                 <?php endforeach; ?>
             </div>
 
@@ -306,24 +366,27 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
 
             <div class="row g-4">
                 <?php foreach ($featuredArticles as $article): ?>
-                <div class="col-lg-4 col-md-6">
-                    <div class="card article-card h-100">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <span class="category-badge"><?php echo getArticleCategory($article['id']); ?></span>
-                                <small class="text-muted"><?php echo date('d.m.Y', strtotime($article['published_at'])); ?></small>
-                            </div>
-                            <h5 class="card-title"><?php echo htmlspecialchars($article['title']); ?></h5>
-                            <p class="card-text text-muted"><?php echo mb_substr(strip_tags($article['abstract']), 0, 150); ?>...</p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted"><?php echo htmlspecialchars($article['author_name']); ?></small>
-                                <a href="article.php?id=<?php echo $article['id']; ?>" class="btn btn-sm btn-primary">
-                                    <?php echo getTranslation('read_more'); ?>
-                                </a>
+                    <div class="col-lg-4 col-md-6">
+                        <div class="card article-card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <span class="category-badge"><?php echo getArticleCategory($article['id']); ?></span>
+                                    <small
+                                        class="text-muted"><?php echo date('d.m.Y', strtotime($article['published_at'])); ?></small>
+                                </div>
+                                <h5 class="card-title"><?php echo htmlspecialchars($article['title']); ?></h5>
+                                <p class="card-text text-muted">
+                                    <?php echo mb_substr(strip_tags($article['abstract']), 0, 150); ?>...</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small
+                                        class="text-muted"><?php echo htmlspecialchars($article['author_name']); ?></small>
+                                    <a href="article.php?id=<?php echo $article['id']; ?>" class="btn btn-sm btn-primary">
+                                        <?php echo getTranslation('read_more'); ?>
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
                 <?php endforeach; ?>
             </div>
 
@@ -339,26 +402,29 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
         <div class="container">
             <div class="section-header">
                 <h2 class="section-title">Maqola Mualliflari</h2>
-                <p>Jurnalimizda maqolalari nashr etilgan taniqli olimlar va tadqiqotchilar. Har bir muallif o'z sohasida mutaxassis bo'lib, ilmiy tadqiqotlarni amalga oshiradi.</p>
+                <p>Jurnalimizda maqolalari nashr etilgan taniqli olimlar va tadqiqotchilar. Har bir muallif o'z sohasida
+                    mutaxassis bo'lib, ilmiy tadqiqotlarni amalga oshiradi.</p>
             </div>
-            
+
             <div class="editorial-grid">
                 <?php foreach ($authors as $author): ?>
-                <div class="editor-card">
-                    <div class="editor-img" style="background-image: url('<?php echo getAuthorImage($author); ?>');"></div>
-                    <h3 class="editor-name"><?php echo htmlspecialchars($author['name']); ?></h3>
-                    <div class="editor-position">Maqola Muallifi</div>
-                    <p><?php echo htmlspecialchars($author['affiliation'] ?? 'Tadqiqotchi'); ?></p>
-                    <?php if (!empty($author['research_interests'])): ?>
-                    <p><strong>Tadqiqot sohalari:</strong> <?php echo htmlspecialchars(mb_substr($author['research_interests'], 0, 100)); ?></p>
-                    <?php endif; ?>
-                    <div class="author-stats">
-                        <i class="bi bi-file-text"></i> <?php echo $author['article_count']; ?> ta maqola
+                    <div class="editor-card">
+                        <div class="editor-img" style="background-image: url('<?php echo getAuthorImage($author); ?>');">
+                        </div>
+                        <h3 class="editor-name"><?php echo htmlspecialchars($author['name']); ?></h3>
+                        <div class="editor-position">Maqola Muallifi</div>
+                        <p><?php echo htmlspecialchars($author['affiliation'] ?? 'Tadqiqotchi'); ?></p>
+                        <?php if (!empty($author['research_interests'])): ?>
+                            <p><strong>Tadqiqot sohalari:</strong>
+                                <?php echo htmlspecialchars(mb_substr($author['research_interests'], 0, 100)); ?></p>
+                        <?php endif; ?>
+                        <div class="author-stats">
+                            <i class="bi bi-file-text"></i> <?php echo $author['article_count']; ?> ta maqola
+                        </div>
+                        <?php if (!empty($author['bio'])): ?>
+                            <p class="editor-bio"><?php echo htmlspecialchars(mb_substr($author['bio'], 0, 150)); ?>...</p>
+                        <?php endif; ?>
                     </div>
-                    <?php if (!empty($author['bio'])): ?>
-                    <p class="editor-bio"><?php echo htmlspecialchars(mb_substr($author['bio'], 0, 150)); ?>...</p>
-                    <?php endif; ?>
-                </div>
                 <?php endforeach; ?>
             </div>
 
@@ -381,19 +447,20 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
 
             <div class="row g-4">
                 <?php foreach ($latestIssues as $issue): ?>
-                <div class="col-lg-4">
-                    <div class="card h-100">
-                        <div class="card-body text-center">
-                            <i class="bi bi-journal-bookmark display-1 text-primary mb-3"></i>
-                            <h4 class="card-title"><?php echo htmlspecialchars($issue['title']); ?></h4>
-                            <p class="text-muted"><?php echo date('F Y', strtotime($issue['issue_date'])); ?></p>
-                            <p class="card-text"><?php echo mb_substr(strip_tags($issue['description']), 0, 100); ?>...</p>
-                            <a href="issue.php?id=<?php echo $issue['id']; ?>" class="btn btn-primary">
-                                <?php echo getTranslation('view_issue'); ?>
-                            </a>
+                    <div class="col-lg-4">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-journal-bookmark display-1 text-primary mb-3"></i>
+                                <h4 class="card-title"><?php echo htmlspecialchars($issue['title']); ?></h4>
+                                <p class="text-muted"><?php echo date('F Y', strtotime($issue['issue_date'])); ?></p>
+                                <p class="card-text"><?php echo mb_substr(strip_tags($issue['description']), 0, 100); ?>...
+                                </p>
+                                <a href="issue.php?id=<?php echo $issue['id']; ?>" class="btn btn-primary">
+                                    <?php echo getTranslation('view_issue'); ?>
+                                </a>
+                            </div>
                         </div>
                     </div>
-                </div>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -410,11 +477,11 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
 
             <div class="row g-3">
                 <?php foreach ($categories as $category): ?>
-                <div class="col-lg-2 col-md-3 col-4">
-                    <a href="category.php?slug=<?php echo $category['slug']; ?>" class="btn btn-outline-primary w-100">
-                        <?php echo htmlspecialchars($category['name']); ?>
-                    </a>
-                </div>
+                    <div class="col-lg-2 col-md-3 col-4">
+                        <a href="category.php?slug=<?php echo $category['slug']; ?>" class="btn btn-outline-primary w-100">
+                            <?php echo htmlspecialchars($category['name']); ?>
+                        </a>
+                    </div>
                 <?php endforeach; ?>
             </div>
         </div>
@@ -424,10 +491,12 @@ $totalAuthors = $pdo->query("SELECT COUNT(DISTINCT author_id) FROM articles WHER
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
+
 </html>
 <?php
 // Yordamchi funksiyalar
-function getArticleCategory($articleId) {
+function getArticleCategory($articleId)
+{
     global $pdo;
     $stmt = $pdo->prepare("
         SELECT c.name FROM categories c 
@@ -440,11 +509,12 @@ function getArticleCategory($articleId) {
     return $result ? htmlspecialchars($result['name']) : 'Umumiy';
 }
 
-function getAuthorImage($author) {
+function getAuthorImage($author)
+{
     if (!empty($author['profile_image']) && file_exists('uploads/profiles/' . $author['profile_image'])) {
         return 'uploads/profiles/' . $author['profile_image'];
     }
-    
+
     // Default profile images based on gender or random
     $defaultImages = [
         'https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=1374&q=80',
@@ -454,7 +524,7 @@ function getAuthorImage($author) {
         'https://images.unsplash.com/photo-1580489944761-15a19d654956?ixlib=rb-4.0.3&auto=format&fit=crop&w=1361&q=80',
         'https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-4.0.3&auto=format&fit=crop&w=1376&q=80'
     ];
-    
+
     // ID asosida tasodifiy rasm tanlash (bir xil ID uchun bir xil rasm)
     $randomIndex = crc32($author['id'] ?? time()) % count($defaultImages);
     return $defaultImages[$randomIndex];
